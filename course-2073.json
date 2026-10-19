@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "courseId": 2073,
+  "repository": "LearningOS/2026a-rcore-xiex16070-jpg",
+  "user": "xiex16070-jpg",
+  "totalScore": 500,
+  "chapters": {
+    "ch3": {
+      "points": "7/7",
+      "score": 100,
+      "commit": "1b0a5ffbf72523d0c04044e355bbc22ddd919a92"
+    }
+  },
+  "score": 100,
+  "upload": {
+    "status": "pending",
+    "runId": "39196563725",
+    "runAttempt": "1"
+  }
+}
