@@ -262,6 +262,93 @@ impl MemorySet {
             false
         }
     }
+
+    /// Map `[start_va, start_va + len)` with freshly allocated frames.
+    ///
+    /// `len` is rounded up to a whole number of pages.  Return `false` if the
+    /// range is empty, overflows or overlaps an area which is already mapped.
+    pub fn mmap_area(
+        &mut self,
+        start_va: VirtAddr,
+        len: usize,
+        permission: MapPermission,
+    ) -> bool {
+        let end_va = match start_va.0.checked_add(len) {
+            Some(end_va) if len > 0 => end_va,
+            _ => return false,
+        };
+        let start_vpn = start_va.floor();
+        let end_vpn = VirtAddr::from(end_va).ceil();
+        let overlap = self.areas.iter().any(|area| {
+            area.vpn_range.get_start() < area.vpn_range.get_end()
+                && area.vpn_range.get_start() < end_vpn
+                && start_vpn < area.vpn_range.get_end()
+        });
+        if overlap {
+            return false;
+        }
+        let new_area = MapArea::new(
+            start_va,
+            VirtAddr::from(end_va),
+            MapType::Framed,
+            permission,
+        );
+        self.push(new_area, None);
+        true
+    }
+
+    /// Unmap `[start_va, start_va + len)` from the area containing it.
+    ///
+    /// The range must be completely contained in a single area.  The area is
+    /// shrunk, splitted into two, or removed when the whole area is unmapped.
+    /// Return `false` if no single area contains the whole range.
+    pub fn munmap_area(&mut self, start_va: VirtAddr, len: usize) -> bool {
+        let end_va = match start_va.0.checked_add(len) {
+            Some(end_va) if len > 0 => end_va,
+            _ => return false,
+        };
+        let start_vpn = start_va.floor();
+        let end_vpn = VirtAddr::from(end_va).ceil();
+        if end_vpn <= start_vpn {
+            return false;
+        }
+        let index = match self.areas.iter().position(|area| {
+            area.vpn_range.get_start() <= start_vpn && end_vpn <= area.vpn_range.get_end()
+        }) {
+            Some(index) => index,
+            None => return false,
+        };
+        let mut area = self.areas.remove(index);
+        let area_start = area.vpn_range.get_start();
+        let area_end = area.vpn_range.get_end();
+        for vpn in VPNRange::new(start_vpn, end_vpn) {
+            self.page_table.unmap(vpn);
+        }
+        let map_type = area.map_type;
+        let map_perm = area.map_perm;
+        // Keep the frames before `start_vpn` and after `end_vpn`; the frames
+        // in the unmapped range are dropped and returned to the allocator.
+        let mut right_frames = area.data_frames.split_off(&start_vpn);
+        let _removed_frames = right_frames.split_off(&end_vpn);
+        let left_frames = area.data_frames;
+        if start_vpn > area_start {
+            self.areas.push(MapArea {
+                vpn_range: VPNRange::new(area_start, start_vpn),
+                data_frames: left_frames,
+                map_type,
+                map_perm,
+            });
+        }
+        if end_vpn < area_end {
+            self.areas.push(MapArea {
+                vpn_range: VPNRange::new(end_vpn, area_end),
+                data_frames: right_frames,
+                map_type,
+                map_perm,
+            });
+        }
+        true
+    }
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {
