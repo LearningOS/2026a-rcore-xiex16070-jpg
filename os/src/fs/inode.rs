@@ -4,7 +4,7 @@
 //!
 //! `UPSafeCell<OSInodeInner>` -> `OSInode`: for static `ROOT_INODE`,we
 //! need to wrap `OSInodeInner` into `UPSafeCell`
-use super::File;
+use super::{File, Stat, StatMode};
 use crate::drivers::BLOCK_DEVICE;
 use crate::mm::UserBuffer;
 use crate::sync::UPSafeCell;
@@ -37,6 +37,22 @@ impl OSInode {
             inner: unsafe { UPSafeCell::new(OSInodeInner { offset: 0, inode }) },
         }
     }
+    /// get the stat of current inode
+    pub fn get_stat(&self) -> Stat {
+        let inner = self.inner.exclusive_access();
+        let inode = &inner.inode;
+        Stat {
+            dev: 0,
+            ino: inode.inode_id() as u64,
+            mode: if inode.is_dir() {
+                StatMode::DIR
+            } else {
+                StatMode::FILE
+            },
+            nlink: inode.nlink(),
+            pad: [0u64; 7],
+        }
+    }
     /// read all data from the inode
     pub fn read_all(&self) -> Vec<u8> {
         let mut inner = self.inner.exclusive_access();
@@ -56,6 +72,7 @@ impl OSInode {
 }
 
 lazy_static! {
+    /// The root inode of the file system, which is the root directory
     pub static ref ROOT_INODE: Arc<Inode> = {
         let efs = EasyFileSystem::open(BLOCK_DEVICE.clone());
         Arc::new(EasyFileSystem::root_inode(&efs))
@@ -155,5 +172,30 @@ impl File for OSInode {
             total_write_size += write_size;
         }
         total_write_size
+    }
+    fn stat(&self) -> Option<Stat> {
+        Some(self.get_stat())
+    }
+}
+
+/// Create a hard link `new_name` to the file `old_name` in the root directory
+pub fn link_file(old_name: &str, new_name: &str) -> isize {
+    if let Some(inode) = ROOT_INODE.find(old_name) {
+        if inode.is_dir() || ROOT_INODE.link(new_name, &inode).is_none() {
+            -1
+        } else {
+            0
+        }
+    } else {
+        -1
+    }
+}
+
+/// Remove the file `name` from the root directory
+pub fn unlink_file(name: &str) -> isize {
+    if ROOT_INODE.unlink(name).is_some() {
+        0
+    } else {
+        -1
     }
 }

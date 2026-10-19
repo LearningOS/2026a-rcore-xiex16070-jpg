@@ -78,6 +78,29 @@ impl MemorySet {
             self.areas.remove(idx);
         }
     }
+    /// Whether the virtual range [start, end) conflicts with any map area
+    pub fn is_overlapped(&self, start: VirtAddr, end: VirtAddr) -> bool {
+        let (start_vpn, end_vpn) = (start.floor(), end.ceil());
+        self.areas.iter().any(|area| {
+            start_vpn < area.vpn_range.get_end() && area.vpn_range.get_start() < end_vpn
+        })
+    }
+    /// Remove the map area which covers exactly [start, end), return whether succeeded
+    pub fn munmap(&mut self, start: VirtAddr, end: VirtAddr) -> bool {
+        if start >= end || !start.aligned() || !end.aligned() {
+            return false;
+        }
+        let (start_vpn, end_vpn) = (start.floor(), end.ceil());
+        if let Some(idx) = self.areas.iter().position(|area| {
+            area.vpn_range.get_start() == start_vpn && area.vpn_range.get_end() == end_vpn
+        }) {
+            let mut area = self.areas.remove(idx);
+            area.unmap(&mut self.page_table);
+            true
+        } else {
+            false
+        }
+    }
     /// Add a new MapArea into this MemorySet.
     /// Assuming that there are no conflicts in the virtual address
     /// space.
