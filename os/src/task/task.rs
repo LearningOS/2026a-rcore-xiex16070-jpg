@@ -9,6 +9,15 @@ use alloc::sync::{Arc, Weak};
 use alloc::vec::Vec;
 use core::cell::RefMut;
 
+/// The stride of a task with the default priority.
+///
+/// Also the base from which the stride of any priority is derived:
+/// `stride = BIG_STRIDE / priority`.
+pub const BIG_STRIDE: usize = 1 << 20;
+
+/// The default priority of a newly created task.
+pub const DEFAULT_PRIORITY: usize = 16;
+
 /// Task control block structure
 ///
 /// Directly save the contents that will not change during running
@@ -68,6 +77,16 @@ pub struct TaskControlBlockInner {
 
     /// Program break
     pub program_brk: usize,
+
+    /// Stride of the current process, derived from its priority.
+    ///
+    /// A smaller stride means the process accumulates `pass` more slowly
+    /// and therefore gets more CPU time.
+    pub stride: usize,
+
+    /// Accumulated pass value. The process with the smallest pass is
+    /// chosen to run next.
+    pub pass: usize,
 }
 
 impl TaskControlBlockInner {
@@ -118,6 +137,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: user_sp,
                     program_brk: user_sp,
+                    stride: BIG_STRIDE / DEFAULT_PRIORITY,
+                    pass: 0,
                 })
             },
         };
@@ -191,6 +212,8 @@ impl TaskControlBlock {
                     exit_code: 0,
                     heap_bottom: parent_inner.heap_bottom,
                     program_brk: parent_inner.program_brk,
+                    stride: parent_inner.stride,
+                    pass: 0,
                 })
             },
         });

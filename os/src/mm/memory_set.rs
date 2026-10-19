@@ -72,6 +72,31 @@ impl MemorySet {
             self.areas.remove(idx);
         }
     }
+    /// Whether the virtual address range `[start_va, end_va)` overlaps
+    /// with any existing area.
+    pub fn overlaps(&self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        let start_vpn = start_va.floor();
+        let end_vpn = end_va.ceil();
+        self.areas.iter().any(|area| {
+            start_vpn < area.vpn_range.get_end() && area.vpn_range.get_start() < end_vpn
+        })
+    }
+    /// Remove the area that exactly covers `[start_va, end_va)`.
+    ///
+    /// Return false if there is no such area.
+    pub fn remove_area(&mut self, start_va: VirtAddr, end_va: VirtAddr) -> bool {
+        let start_vpn = start_va.floor();
+        let end_vpn = end_va.ceil();
+        if let Some(idx) = self.areas.iter().position(|area| {
+            area.vpn_range.get_start() == start_vpn && area.vpn_range.get_end() == end_vpn
+        }) {
+            let mut area = self.areas.remove(idx);
+            area.unmap(&mut self.page_table);
+            true
+        } else {
+            false
+        }
+    }
     /// Add a new MapArea into this MemorySet.
     /// Assuming that there are no conflicts in the virtual address
     /// space.
