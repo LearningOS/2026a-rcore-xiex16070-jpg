@@ -73,6 +73,8 @@ pub fn wakeup_task(task: Arc<TaskControlBlock>) {
     trace!("kernel: TaskManager::wakeup_task");
     let mut task_inner = task.inner_exclusive_access();
     task_inner.task_status = TaskStatus::Ready;
+    // the task is no longer waiting for a mutex/semaphore
+    task_inner.wait_target = None;
     drop(task_inner);
     add_task(task);
 }

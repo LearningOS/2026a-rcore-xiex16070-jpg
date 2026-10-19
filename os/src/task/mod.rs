@@ -26,7 +26,7 @@ use crate::timer::remove_timer;
 use alloc::{sync::Arc, vec::Vec};
 use lazy_static::*;
 use manager::fetch_task;
-use process::ProcessControlBlock;
+pub use process::{ProcessControlBlock, ProcessControlBlockInner};
 use switch::__switch;
 
 pub use context::TaskContext;
@@ -56,6 +56,20 @@ pub fn suspend_current_and_run_next() {
     add_task(task);
     // jump to scheduling cycle
     schedule(task_cx_ptr);
+}
+
+/// The tid of the current task
+///
+/// It is used by the synchronization primitives to record the owner/holder
+/// of a mutex/semaphore and to run deadlock detection.
+pub fn current_tid() -> usize {
+    current_task()
+        .unwrap()
+        .inner_exclusive_access()
+        .res
+        .as_ref()
+        .map(|res| res.tid)
+        .unwrap_or(0)
 }
 
 /// Make current task blocked and switch to the next task.
