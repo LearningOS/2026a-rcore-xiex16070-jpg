@@ -14,7 +14,13 @@
 | 官方检查器 | `rCore-Tutorial-Checker` @ `7d61ec55b58eed6ca7052917846c1b87af34563a` |
 | 官方测试集 | `rCore-Tutorial-Test` @ `a0593662ad55d670ba8c27ce1763347cd0dd552f` |
 | 工具链 | Rust `nightly-2024-05-02`，目标 `riscv64gc-unknown-none-elf` |
-| 运行环境 | `qemu-system-riscv64 -machine virt`，RustSBI `rustsbi-qemu.bin` |
+| 运行环境 | `qemu-system-riscv64 -machine virt`，`qemu 7.0.0` 及以上 |
+| 引导固件 | 仓库自带 `rustsbi-mini`（544 字节，源码见 `tools/firmware/`，说明见 `bootloader/README-mini-firmware.md`） |
+
+> 说明：课程 CI 镜像 `alicesama/rcore-ci:2024a` 内的 QEMU 是 7.0.0，仓库原带的
+> RustSBI Prototyper 0.4.1 固件在该版本的 `hart_features_detection()`（HPM CSR 探测）
+> 处空转，内核一行日志都不会输出。因此把固件换成只使用 CLINT、NS16550A、SiFive test、
+> PMP 这些各版本 QEMU 都提供的设施的最小实现，SBI 语义与内核实际使用的四个调用一致。
 
 ## 3. 实验内容
 
