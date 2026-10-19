@@ -14,7 +14,7 @@ mod switch;
 #[allow(clippy::module_inception)]
 mod task;
 
-use crate::config::MAX_APP_NUM;
+use crate::config::{MAX_APP_NUM, MAX_SYSCALL_NUM};
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
 use lazy_static::*;
@@ -22,6 +22,14 @@ use switch::__switch;
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
+
+/// Per-task syscall counters, indexed by `[task_id][syscall_id]`.
+///
+/// The counters live in a standalone static array instead of `TaskControlBlock`
+/// so that the (rather large) array is not copied around on the tiny boot
+/// stack when the task manager is initialised.
+static mut SYSCALL_COUNTS: [[u32; MAX_SYSCALL_NUM]; MAX_APP_NUM] =
+    [[0; MAX_SYSCALL_NUM]; MAX_APP_NUM];
 
 /// The task manager, where all the tasks are managed.
 ///
@@ -168,4 +176,27 @@ pub fn suspend_current_and_run_next() {
 pub fn exit_current_and_run_next() {
     mark_current_exited();
     run_next_task();
+}
+
+/// Record one more syscall `id` issued by the current task.
+///
+/// This is called on every syscall entry, so the count of the syscall which is
+/// being executed already includes the current call.
+pub fn inc_current_syscall_count(id: usize) {
+    if id >= MAX_SYSCALL_NUM {
+        return;
+    }
+    let current = TASK_MANAGER.inner.exclusive_access().current_task;
+    unsafe {
+        SYSCALL_COUNTS[current][id] += 1;
+    }
+}
+
+/// How many times has the current task issued syscall `id` so far.
+pub fn current_syscall_count(id: usize) -> usize {
+    if id >= MAX_SYSCALL_NUM {
+        return 0;
+    }
+    let current = TASK_MANAGER.inner.exclusive_access().current_task;
+    unsafe { SYSCALL_COUNTS[current][id] as usize }
 }
